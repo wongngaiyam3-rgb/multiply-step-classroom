@@ -1,4 +1,4 @@
-# 櫻花數學道場
+# 雪林數學小屋
 
 小四數學自習網站。學生在 iPad 或電腦選擇 4A、4B、4C 及 1–25 號後開始。每次開新一回由伺服器抽十題，同一回合內題目不重複。
 
@@ -18,14 +18,14 @@
 | 檔案 | 用途 |
 | --- | --- |
 | `index.html` | 學生入口、主要導覽及教師入口。 |
-| `style.css` | 日式配色、版面、按鈕、落櫻及完成動畫，支援系統減少動態效果設定。 |
-| `spring.svg` | 原創櫻花、狐狸及富士山主圖，內嵌 WebP。 |
+| `style.css` | 北歐配色、觸控版面、首頁及答題飄雪、完成動畫，支援系統減少動態效果設定。 |
+| `nordic-winter.svg` | 原創北歐雪地、木屋及小狐狸主圖，內嵌 WebP。 |
 | `app.js` | 班別學號、題目介面、逐題回饋、計時、成績、排行榜，以及教師查閱與 CSV。 |
 | `config.js` | Supabase API 網址及可公開的 publishable key。 |
 | `supabase/schema.sql` | 獨立資料表、伺服器出題、計分、答題與教師權限。 |
 | `supabase/ranking.sql` | 將各裝置的已提交題數按班別和學號合併，產生公開排行榜代號。 |
 
-發佈版本的網頁檔案直接放在 GitHub 上 `sakura-math/`，沿用現有 Pages 的 `main` 根目錄部署。這個版本毋須安裝 JavaScript 套件或執行建置指令。若另建 GitHub 儲存庫，可將以上網頁檔放在根目錄，再在 **Settings → Pages** 選擇由 `main` 的根目錄發佈。
+發佈版本的網頁檔案直接放在 GitHub 上 `sakura-math/`，沿用現有 Pages 的 `main` 根目錄部署。這個版本毋須安裝 JavaScript 套件或執行建置指令。若另建 GitHub 儲存庫，可將網站前端檔案放在根目錄，再在 **Settings → Pages** 選擇由 `main` 的根目錄發佈。
 
 ## 學生紀錄及計分
 
