@@ -21,13 +21,13 @@ begin
   if not found then
     if p_mode='multiple' then
       select jsonb_agg(jsonb_build_object(
-        'entry','list','prompt','寫出 '||m.cap||' 以內 '||m.n||' 的所有正倍數。',
-        'expected',(select jsonb_agg(v order by v) from generate_series(m.n,m.cap,m.n) v)))
+        'entry','list','prompt','寫出 '||m.n||' 的倍數中，小於 '||m.cap||' 的所有數。',
+        'expected',(select jsonb_agg(v order by v) from generate_series(m.n,m.cap-1,m.n) v)))
       into questions
       from (
         select n,cap from generate_series(2,12) n
         cross join unnest(array[30,40,50,60,80,100]) cap
-        where cap/n between 4 and 10 order by random() limit 10
+        where (cap-1)/n between 4 and 10 order by random() limit 10
       ) m;
     else
       select jsonb_agg(jsonb_build_object(
