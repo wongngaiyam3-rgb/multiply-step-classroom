@@ -10,6 +10,7 @@
 | 除法 | `division/` | 兩位數或三位數除以兩位數，每題均可整除。 |
 | 倍數 | `multiples/` | 寫出小於指定上限的所有倍數，由該數本身開始列出。上限不算在內，每題有 4 至 6 個答案。 |
 | 因數 | `factors/` | 寫出指定數的所有正因數。 |
+| 倍數入門 | `multiples-beginner/` | 每回十題，四選一，不計分。答錯即顯示解題步驟並可重答。 |
 
 網站發佈在 GitHub Pages 的 `multiply-step-classroom/sakura-math/`。各專頁直接開啟指定練習。綜合首頁可切換四種練習，也支援原有的 `?mode=div`、`?mode=multiple` 及 `?mode=factor` 網址。獨立測試可加入 `?demo=1`。示範使用記憶體資料，每次重新載入便清空，適合試做及投影演示。
 
@@ -24,6 +25,7 @@
 | `app.js` | 班別學號、題目介面、逐題回饋、計時、成績、排行榜，以及教師查閱與 CSV。 |
 | `config.js` | Supabase API 網址及可公開的 publishable key。 |
 | `supabase/schema.sql` | 獨立資料表、伺服器出題、計分、答題與教師權限。 |
+| `multiples-beginner/`、`supabase/multiples-beginner.sql` | 入門練習和獨立的首次完成紀錄。 |
 | `supabase/complete-lists.sql` | 倍數及因數填寫題的出題及判分。 |
 | `supabase/ranking.sql` | 將各裝置的已提交題數按班別和學號合併，產生公開排行榜代號。 |
 
@@ -50,10 +52,12 @@ on conflict do nothing;
 
 3. 在網頁底部按「教師入口」，以該帳戶登入。可逐回展開學生答案，或匯出 UTF-8 逐題 CSV。
 
+倍數入門使用專頁底部的教師入口查閱和匯出首次完成紀錄，沿用同一教師白名單。
+
 教師白名單由伺服器檢查。學生原始資料保存在啟用 RLS 的獨立 schema。教師密碼、後端金鑰和學生作答紀錄均存放在 GitHub 原始碼以外。
 
 ## 改題或另作新版本
 
 沿用現有四個模式時，可直接派發相應的專頁網址。要調整題型或難度，在 `public.sakura_start` 或 `public.sakura_start_lists` 的對應模式修改數字範圍、題目與正確答案，再以遷移更新 Supabase。同步修改 `app.js` 中的模式描述及示範題。新增主題時也要更新資料表的模式限制。現有回合已保存當時的原題和答案。
 
-若移到另一個 Supabase 專案，依序執行 `schema.sql`、`ranking.sql`、`complete-lists.sql`，再填寫新的 `config.js` 和授權教師帳戶。
+若移到另一個 Supabase 專案，依序執行 `schema.sql`、`ranking.sql`、`complete-lists.sql`、`multiples-beginner.sql`，再填寫新的 `config.js` 和授權教師帳戶。
