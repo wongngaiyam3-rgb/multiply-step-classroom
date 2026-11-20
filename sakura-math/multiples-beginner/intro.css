@@ -1,0 +1,15 @@
+.winter-intro .landscape{object-position:56% center}
+.join .field{min-width:0}
+.intro-question{margin-top:9px}
+.intro-question strong{color:#205d54}
+.pick-number{font-variant-numeric:tabular-nums}
+.pick-number:disabled{cursor:default}
+.pick-number[data-state="wrong"]{background:#fae9df;border-color:#b5664e;color:#783523;opacity:1}
+.pick-number[data-state="right"]{background:#d3eee3;border-color:#39846d;color:#154c3d;opacity:1}
+.intro-feedback:empty{display:none}
+.intro-feedback{margin-top:15px}
+.intro-feedback h2{font-size:1.12rem;margin:0 0 7px}
+.intro-feedback p{margin:8px 0 0}
+.intro-feedback ol{padding-inline-start:1.45em;margin:.5em 0;font-weight:550;line-height:1.6}
+.intro-feedback li+li{margin-top:6px}
+.festive-pine{display:inline-block;margin-inline-start:8px;color:#ffd69a}
