@@ -1,11 +1,12 @@
 "use strict";
 const modes = {
-  mul: {name:"乘法", note:"兩位數及三位數 × 兩位數", mark:"×", colors:["#fae2e9","#aa3657"]},
-  div: {name:"除法", note:"兩位數或三位數 ÷ 兩位數", mark:"÷", colors:["#e4e7fa","#4a4788"]},
-  multiple: {name:"倍數", note:"找出指定數的倍數", mark:"倍", colors:["#e1f0e8","#2d705c"]},
-  factor: {name:"因數", note:"辨認指定數的因數", mark:"因", colors:["#fff0d9","#874e20"]}
+  mul: {name:"乘法", note:"兩位數及三位數 × 兩位數", mark:"×", colors:["#e4ede7","#225c4d"]},
+  div: {name:"除法", note:"兩位數或三位數 ÷ 兩位數", mark:"÷", colors:["#e4ebf7","#324f7d"]},
+  multiple: {name:"倍數", note:"找出指定數的倍數", mark:"倍", colors:["#dff0f1","#20626a"]},
+  factor: {name:"因數", note:"辨認指定數的因數", mark:"因", colors:["#f6eadb","#814c2a"]}
 };
 const screen = document.querySelector("#screen");
+const quizWeather = document.querySelector("#quiz-weather");
 const config = window.SAKURA_CONFIG;
 const storageKey = "sakura-math-v1";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,19 +54,27 @@ function status(message, error=false) {
 function show(next, markup, focus=true) {
   clearInterval(ticker);
   view = next;
+  quizWeather.hidden = next !== "quiz";
   version++;
   screen.innerHTML = markup;
   if (focus) screen.querySelector("h1")?.focus({preventScroll:true});
   return version;
 }
-function petals(count, quick=false) {
-  return Array.from({length:count}, (_,i) =>
-    '<i class="petal" style="--left:' + (5+(i*37)%93) + '%;--time:' + (8+i%7) + 's;--delay:' +
-    (quick ? i*.04 : -i*.87) + 's"></i>').join("");
+function snowflakes(count, burst = false) {
+  return Array.from({length:count}, (_, i) => {
+    const travel = 8 + (i * 7) % 13;
+    const delay = burst ? i * .045 : -((i * 1.73 + .6) % travel);
+    const size = i % 5 === 0 ? 19 + i % 7 : 5 + i % 7;
+    return '<i class="flake" style="--left:' + (2 + (i * 37) % 96) +
+      '%;--time:' + travel + 's;--delay:' + delay + 's;--size:' + size +
+      'px;--drift:' + (i % 2 ? 21 + i % 36 : -29 - i % 31) + 'px">' +
+      (i % 5 === 0 ? '❄' : '') + '</i>';
+  }).join("");
 }
 function celebrate() {
-  document.querySelector("#celebration").innerHTML = petals(24,true);
+  document.querySelector("#celebration").innerHTML = snowflakes(24,true);
 }
+quizWeather.innerHTML = snowflakes(28);
 function randomInt(lo, hi) { return lo+Math.floor(Math.random()*(hi-lo+1)); }
 function demoQuestions(topic) {
   const questions = [];
@@ -171,9 +180,9 @@ function transferForm(required=false) {
 }
 function home(focus=true) {
   const picked=modes[mode];
-  show("home", '<div class="landing"><section class="hero"><img class="landscape" src="./spring.svg" alt="櫻花下的小狐狸、鳥居和富士山" fetchpriority="high">' +
-    '<div class="petals" aria-hidden="true">' + petals(14) + '</div><div class="hero-copy"><div class="kicker">四年級 · 數學練習</div>' +
-    '<h1 tabindex="-1">櫻花數學道場</h1><p>每回隨機十題，跟着小狐狸練本領。</p></div></section>' +
+  show("home", '<div class="landing"><section class="hero"><img class="landscape" src="./nordic-winter.svg" alt="北歐雪林中的小狐狸與木屋" fetchpriority="high">' +
+    '<div class="snow-layer hero-snow" aria-hidden="true">' + snowflakes(17) + '</div><div class="hero-copy"><div class="kicker">四年級 · 數學練習</div>' +
+    '<h1 tabindex="-1">雪林數學小屋</h1><p>每回隨機十題，跟着小狐狸練本領。</p></div></section>' +
     '<section class="card join"><div class="kicker">' + (testing?"示範模式":"學生入口") + '</div><h2>準備出發！</h2>' +
     '<p class="lead">選好班別和學號，就可以開始<span id="picked">' + picked.name + '</span>練習。</p>' +
     transferForm() + '</section></div><section class="paths" aria-labelledby="path-head"><div class="paths-head">' +
@@ -213,11 +222,12 @@ async function start(form) {
 }
 function question() {
   const count=round.answers.length, q=round.questions[count], m=modes[round.mode];
-  const body='<div class="meta"><span>' + escape(profile.class) + ' · ' + profile.number + ' 號</span>' +
+  const body='<div class="quiz-banner"><div class="snow-layer banner-snow" aria-hidden="true">' +
+    snowflakes(13) + '</div><div class="meta"><span>' + escape(profile.class) + ' · ' + profile.number + ' 號</span>' +
     '<time class="clock" id="clock">00:00</time></div>' +
     '<div class="progress" aria-label="已完成 ' + count + ' 題">' +
     Array.from({length:10},(_,i)=>'<i class="' + (i<count?"done":i===count?"now":"") + '"></i>').join("") +
-    '</div><div class="kicker">' + m.name + ' · 第 ' + (count+1) + ' / 10 題</div><h1 tabindex="-1" class="problem' +
+    '</div></div><div class="kicker">' + m.name + ' · 第 ' + (count+1) + ' / 10 題</div><h1 tabindex="-1" class="problem' +
     (q.choices?' words':'') + '">' + escape(q.prompt) + (q.choices?'':' ＝ ？') + '</h1>' +
     '<form id="answer-form" class="answer-form">' + (q.choices ?
       '<div class="choices" role="group" aria-label="選擇答案">' + q.choices.map(v=>'<button type="button" class="outline" data-choice="' + v + '" aria-pressed="false">' + v + '</button>').join("") + '</div>' :
