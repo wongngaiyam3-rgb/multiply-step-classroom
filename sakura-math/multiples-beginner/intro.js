@@ -4,11 +4,14 @@ const screen = document.querySelector("#screen");
 const weather = document.querySelector("#quiz-weather");
 const config = window.SAKURA_CONFIG;
 const demo = new URLSearchParams(location.search).get("demo") === "1";
-const questionsPerLevel = 3;
-const maxOptions = 6;
-const milestone = questionsPerLevel * maxOptions;
-const challengeOptions = 8;
-const challengeAnswers = 6;
+const questionGroups = [
+  {answerCount:1, optionCounts:[1,1,1,2,3]},
+  {answerCount:2, optionCounts:[4,4,4,4,4]},
+  {answerCount:4, optionCounts:[6,6,6,6,6]},
+  {answerCount:6, optionCounts:[8,8,8,8,8]}
+];
+const round = questionGroups.flatMap(({answerCount,optionCounts}) =>
+  optionCounts.map(optionCount=>({optionCount,answerCount})));
 const classes = ["4A","4B","4C"];
 let player = null;
 let pool = [];
@@ -74,7 +77,7 @@ function home(focus=true) {
     '<div class="hero-copy"><div class="kicker">四年級 · 不計分練習 <span class="festive-pine" aria-hidden="true">✦</span></div>'+
     '<h1 tabindex="-1">倍數入門</h1><p>選出倍數，跟着小狐狸一步步想。</p></div></section>'+
     '<section class="card join"><h2>準備好就開始</h2>'+
-    '<p class="lead">先看 3 題示範，再從逐步增加的選項中選一個倍數。第 19 題起，從 8 個數字中選出 6 個倍數。答錯可看步驟，再試一次。</p>'+
+    '<p class="lead">每回 20 題。每 5 題轉一組，依次選出 1、2、4、6 個倍數。答錯可看步驟，再試一次。</p>'+
     '<form id="start"><div class="fields"><label class="field">班別<select name="class" required>'+
     '<option value="">請選班別</option>'+opt(classes,player?.class)+'</select></label>'+
     '<label class="field">學號<select name="number" required><option value="">請選學號</option>'+
@@ -83,18 +86,18 @@ function home(focus=true) {
 }
 
 function question(){
-  const multi=index>=milestone;
-  const optionCount=multi?challengeOptions:Math.floor(index/questionsPerLevel)+1;
-  currentQuestion=nextQuestion(optionCount,multi?challengeAnswers:1);
+  const {optionCount,answerCount}=round[index];
+  const multi=answerCount>1;
+  currentQuestion=nextQuestion(optionCount,answerCount);
   const {base,factor,target,options}=currentQuestion;
-  const title=multi?'選出 '+base+' 的 '+challengeAnswers+' 個倍數。':'哪一個數是 <strong>'+base+'</strong> 的倍數？';
+  const title=multi?'選出 '+base+' 的 '+answerCount+' 個倍數。':'哪一個數是 <strong>'+base+'</strong> 的倍數？';
   show("quiz",panel('<div class="quiz-banner"><div class="snow-layer banner-snow" aria-hidden="true">'+snow(12)+'</div>'+
-    '<div class="meta"><span>第 '+(index+1)+' 題</span><span>'+(optionCount===1?"跟着示範":optionCount+" 個選項")+'</span></div></div>'+
+    '<div class="meta"><span>第 '+(index+1)+' / '+round.length+' 題</span><span>'+(optionCount===1?"跟着示範":optionCount+" 個選項")+'</span></div></div>'+
     '<h1 tabindex="-1" class="problem words intro-question">'+title+'</h1>'+
     (optionCount===1?'<p class="lead">'+base+' × '+factor+' ＝ '+target+'。點選 '+target+'，跟着試一次。</p>':'')+
     '<div class="choices" role="group" aria-label="答案選項">'+options.map(v=>
       '<button class="outline pick-number" type="button" data-pick="'+v+'"'+(multi?' aria-pressed="false"':'')+'>'+v+'</button>').join("")+'</div>'+
-    (multi?'<p id="selection-count" class="hint" role="status">已選 0 / '+challengeAnswers+' 個</p>'+
+    (multi?'<p id="selection-count" class="hint" role="status">已選 0 / '+answerCount+' 個</p>'+
       '<div class="actions"><button type="button" class="primary" data-check>提交答案</button></div>':'')+
     '<div id="feedback" class="intro-feedback" role="status"></div>'+
     '<p id="save-status" class="status" role="status"></p>'+
@@ -109,7 +112,7 @@ function showCorrect(message){
   const feedback=document.querySelector("#feedback");
   feedback.className="intro-feedback feedback";
   feedback.innerHTML='<h2>答對了！</h2><p>'+message+'</p>'+
-    '<div class="actions"><button class="primary" data-next>下一題</button></div>';
+    '<div class="actions"><button class="primary" data-next>'+(index+1===round.length?"完成本回":"下一題")+'</button></div>';
   feedback.querySelector("[data-next]").focus();
 }
 
@@ -194,9 +197,9 @@ function updateCompletionNotice(){
   if(!status||!completion)return;
   const messages={
     pending:"正在儲存入門完成紀錄…",
-    saved:"入門練習已完成並儲存，可以繼續答題。",
-    failed:"未能儲存完成紀錄。可以重試儲存或繼續答題。",
-    demo:"入門示範已完成，可以繼續答題。"
+    saved:"本回完成紀錄已儲存。",
+    failed:"未能儲存完成紀錄，可按「重試儲存」。",
+    demo:"示範已完成。"
   };
   status.textContent=messages[completion.state]||"";
   retry.hidden=completion.state!=="failed";
@@ -219,6 +222,22 @@ async function saveCompletion(){
     record.state="failed";
   }
   if(record===completion)updateCompletionNotice();
+}
+
+function newRound(){
+  if(pool.length<round.length)pool=[];
+  completion={state:""};
+  index=0;
+  question();
+}
+
+function finishRound(){
+  show("result",panel('<div class="kicker">倍數入門</div><h1 tabindex="-1">完成本回 20 題！</h1>'+
+    '<p class="lead">你已練習選出 1、2、4 和 6 個倍數。</p>'+
+    '<p id="save-status" class="status" role="status"></p>'+
+    '<div class="actions"><button type="button" class="primary" data-new-round>再練一回</button>'+
+    '<button type="button" class="outline" data-save hidden>重試儲存</button></div>'));
+  saveCompletion();
 }
 
 function teacherHome(){
@@ -275,9 +294,7 @@ document.addEventListener("submit",e=>{
   if(!classes.includes(player.class)||!Number.isInteger(player.number)||player.number<1||player.number>25)return;
   pool=[];
   currentQuestion=undefined;
-  completion={state:""};
-  index=0;
-  question();
+  newRound();
 });
 document.addEventListener("click",e=>{
   const b=e.target.closest("button");
@@ -286,9 +303,10 @@ document.addEventListener("click",e=>{
   if(b.hasAttribute("data-check")&&!b.disabled)checkSelection();
   if(b.hasAttribute("data-next")){
     index++;
-    question();
-    if(index===milestone)saveCompletion();
+    if(index===round.length)finishRound();
+    else question();
   }
+  if(b.hasAttribute("data-new-round"))newRound();
   if(b.hasAttribute("data-home"))home();
   if(b.hasAttribute("data-teacher")||b.hasAttribute("data-logout"))teacherHome();
   if(b.hasAttribute("data-save"))saveCompletion();
