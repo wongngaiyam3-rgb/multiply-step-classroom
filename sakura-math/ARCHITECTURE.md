@@ -41,23 +41,14 @@
 
 ## 教師平台
 
-1. 在同一 Supabase 專案的 **Authentication → Users** 建立或選擇教師的電郵帳戶，抄下其使用者 UUID。
-2. 在 SQL Editor 執行以下指令，把指定帳戶加入本網站的教師名單。
+在網頁底部按「教師入口」，輸入教師密碼，即可查閱及匯出 CSV。倍數入門顯示首次完成時間，其餘練習顯示逐題作答。
 
-```sql
-insert into sakura_math.teachers(user_id)
-values ('把這段換成教師使用者 UUID')
-on conflict do nothing;
-```
+同系列的網站可沿用 `supabase/teacher-password.sql` 的登入服務。密碼以 bcrypt 雜湊存於 Supabase 私有 schema，登入有效期兩小時，登出會撤銷憑證。學生原始作答與教師設定由伺服器保護。
 
-3. 在網頁底部按「教師入口」，以該帳戶登入。可逐回展開學生答案，或匯出 UTF-8 逐題 CSV。
-
-倍數入門使用專頁底部的教師入口查閱和匯出首次完成紀錄，沿用同一教師白名單。
-
-教師白名單由伺服器檢查。學生原始資料保存在啟用 RLS 的獨立 schema。教師密碼、後端金鑰和學生作答紀錄均存放在 GitHub 原始碼以外。
+需要另行部署時，先部署教師登入 SQL，再在私有的 `sakura_math.teacher_password` 表配置教師密碼的 bcrypt 雜湊。更換密碼時應同時撤銷舊登入憑證。
 
 ## 改題或另作新版本
 
 沿用現有四個模式時，可直接派發相應的專頁網址。要調整題型或難度，在 `public.sakura_start` 或 `public.sakura_start_lists` 的對應模式修改數字範圍、題目與正確答案，再以遷移更新 Supabase。同步修改 `app.js` 中的模式描述及示範題。新增主題時也要更新資料表的模式限制。現有回合已保存當時的原題和答案。
 
-若移到另一個 Supabase 專案，依序執行 `schema.sql`、`ranking.sql`、`complete-lists.sql`、`multiples-beginner.sql`，再填寫新的 `config.js` 和授權教師帳戶。
+若移到另一個 Supabase 專案，依序執行 `schema.sql`、`ranking.sql`、`complete-lists.sql`、`multiples-beginner.sql`、`teacher-password.sql`，再填寫新的 `config.js` 和教師密碼雜湊。
