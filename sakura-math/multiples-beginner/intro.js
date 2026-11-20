@@ -16,7 +16,10 @@ const classes = ["4A","4B","4C"];
 let player = null;
 let pool = [];
 let currentQuestion;
-let completion = null;
+let currentRound;
+const unsavedRounds = new Set();
+let saving = false;
+let saveFailed = false;
 let index = 0;
 let page = "";
 let teacherRows = [];
@@ -102,10 +105,15 @@ function question(){
     '<div id="feedback" class="intro-feedback" role="status"></div>'+
     '<p id="save-status" class="status" role="status"></p>'+
     '<button type="button" class="outline" data-save hidden>重試儲存</button>'));
-  updateCompletionNotice();
+  updateProgressNotice();
 }
 
 function showCorrect(message){
+  currentRound.answered=index+1;
+  if(!demo){
+    unsavedRounds.add(currentRound);
+    saveProgress();
+  }
   screen.querySelectorAll("[data-pick]").forEach(option=>{option.disabled=true;});
   const check=screen.querySelector("[data-check]");
   if(check)check.disabled=true;
@@ -178,55 +186,63 @@ function checkSelection(){
   showCorrect("你選的 "+answerCount+" 個數，都可以用 "+base+" 乘 1、2、3……中的其中一個數得到。");
 }
 
-async function request(path,body){
+async function request(path,body,keepalive=false){
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),10000);
   try {
     const response=await fetch(config.url+path,{
-      method:"POST",headers:{apikey:config.key,"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller.signal
+      method:"POST",headers:{apikey:config.key,"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller.signal,keepalive
     });
     if(!response.ok)throw Error("Request failed");
     return await response.json();
   } finally {clearTimeout(timeout);}
 }
-const rpc=(name,body)=>request("/rest/v1/rpc/sakura_beginner_"+name,body);
+
 const teacherRpc=(name,body)=>request("/rest/v1/rpc/sakura_teacher_password_"+name,body);
-function updateCompletionNotice(){
+function updateProgressNotice(){
   const status=screen.querySelector("#save-status");
   const retry=screen.querySelector("[data-save]");
-  if(!status||!completion)return;
-  const messages={
-    pending:"正在儲存入門完成紀錄…",
-    saved:"本回完成紀錄已儲存。",
-    failed:"未能儲存完成紀錄，可按「重試儲存」。",
-    demo:"示範已完成。"
-  };
-  status.textContent=messages[completion.state]||"";
-  retry.hidden=completion.state!=="failed";
-}
-async function saveCompletion(){
-  const record=completion;
-  if(record.state==="pending"||record.state==="saved")return;
+  if(!status||!currentRound)return;
+  retry.hidden=!saveFailed;
   if(demo){
-    record.state="demo";
-    updateCompletionNotice();
-    return;
+    status.textContent=page==="result"?"示範已完成。":"";
+  }else if(saveFailed){
+    status.textContent="有題數尚未儲存，可按「重試儲存」。";
+  }else if(saving){
+    status.textContent="正在儲存題數…";
+  }else{
+    status.textContent=currentRound.saved?"本回已儲存 "+currentRound.saved+" 題。":"";
   }
-  record.state="pending";
-  updateCompletionNotice();
+}
+
+async function saveProgress(){
+  if(saving||!unsavedRounds.size)return;
+  saving=true;
+  saveFailed=false;
+  updateProgressNotice();
   try{
-    const saved=await rpc("complete",{p_class:player.class,p_number:player.number});
-    if(saved!==true)throw Error("Completion not saved");
-    record.state="saved";
+    for(const item of unsavedRounds){
+      while(item.saved<item.answered){
+        const count=item.answered;
+        const saved=await request("/rest/v1/rpc/sakura_beginner_save_progress",{
+          p_id:item.id,p_class:item.class,p_number:item.number,p_count:count
+        },true);
+        if(!Number.isInteger(saved)||saved<count||saved>round.length)throw Error("Progress not saved");
+        item.saved=saved;
+      }
+      unsavedRounds.delete(item);
+    }
   }catch{
-    record.state="failed";
+    saveFailed=true;
+  }finally{
+    saving=false;
+    updateProgressNotice();
   }
-  if(record===completion)updateCompletionNotice();
 }
 
 function newRound(){
   if(pool.length<round.length)pool=[];
-  completion={state:""};
+  currentRound={id:demo?null:crypto.randomUUID(),...player,answered:0,saved:0};
   index=0;
   question();
 }
@@ -237,9 +253,11 @@ function finishRound(){
     '<p id="save-status" class="status" role="status"></p>'+
     '<div class="actions"><button type="button" class="primary" data-new-round>再練一回</button>'+
     '<button type="button" class="outline" data-save hidden>重試儲存</button></div>'));
-  saveCompletion();
+  updateProgressNotice();
 }
 
+const displayCount = count => count ?? "—";
+const displayCompleted = value => value ? hkDate(value) : "—";
 function teacherHome(){
   if(teacherToken)teacherRpc("logout",{p_token:teacherToken}).catch(()=>{});
   teacherToken=null;
@@ -268,10 +286,11 @@ async function teacherLogin(form){
     teacherRows=rows;
     teacherToken=token;
     const body=rows.map(r=>'<tr><td>'+escape(r.class)+'</td><td>'+escape(r.number)+'</td><td>'+
-      escape(hkDate(r.completed))+'</td></tr>').join("");
+      escape(displayCount(r.question_count))+'</td><td>'+escape(displayCompleted(r.completed))+'</td></tr>').join("");
     show("teacher",panel('<h1 tabindex="-1">倍數入門完成紀錄</h1>'+
-      (body?'<div class="table-wrap"><table class="data"><thead><tr><th scope="col">班別</th><th scope="col">學號</th>'+
-      '<th scope="col">首次完成時間</th></tr></thead><tbody>'+body+'</tbody></table></div>':
+      (body?'<p class="hint">題數從功能啟用後累計。較早只記完成時間的紀錄，題數顯示為「—」。</p>'+
+      '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">班別</th><th scope="col">學號</th>'+
+      '<th scope="col">已完成題數</th><th scope="col">首次完成一回時間</th></tr></thead><tbody>'+body+'</tbody></table></div>':
       '<p class="empty">暫時未有完成紀錄。</p>')+
       '<div class="actions"><button class="primary" data-export>匯出 CSV</button>'+
       '<button class="outline" data-logout>登出</button></div>'));
@@ -283,8 +302,8 @@ async function teacherLogin(form){
 }
 function downloadRecords(){
   if(!teacherToken)return;
-  const cells=[["班別","學號","首次完成時間（香港）"],
-    ...teacherRows.map(r=>[r.class,r.number,hkDate(r.completed)])];
+  const cells=[["班別","學號","已完成題數","首次完成一回時間（香港）"],
+    ...teacherRows.map(r=>[r.class,r.number,displayCount(r.question_count),displayCompleted(r.completed)])];
   const csv="\uFEFF"+cells.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");
   const link=document.createElement("a");
   link.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
@@ -315,7 +334,7 @@ document.addEventListener("click",e=>{
   if(b.hasAttribute("data-new-round"))newRound();
   if(b.hasAttribute("data-home"))home();
   if(b.hasAttribute("data-teacher")||b.hasAttribute("data-logout"))teacherHome();
-  if(b.hasAttribute("data-save"))saveCompletion();
+  if(b.hasAttribute("data-save"))saveProgress();
   if(b.hasAttribute("data-export"))downloadRecords();
 });
 home(false);
