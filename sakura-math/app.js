@@ -95,7 +95,7 @@ function demoQuestions(topic) {
     } else if (topic === "multiple") {
       a = caps[randomInt(0,caps.length-1)]; b = randomInt(2,12);
       const count = Math.floor((a - 1) / b);
-      if (count<4 || count>10) continue;
+      if (count<4 || count>6) continue;
       prompt = "寫出 "+b+" 的倍數中，小於 "+a+" 的所有數。";
       expected = Array.from({length:count},(_,i)=>(i+1)*b);
     } else {
