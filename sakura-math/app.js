@@ -145,16 +145,15 @@ function timeoutSignal() {
   setTimeout(() => controller.abort(), 12000);
   return controller.signal;
 }
-async function request(path, body, token) {
+async function request(path, body) {
   const response = await fetch(config.url + path, {
-    method:"POST", headers:{"Content-Type":"application/json", apikey:config.key,
-      ...(token ? {Authorization:"Bearer "+token} : {})},
+    method:"POST", headers:{"Content-Type":"application/json", apikey:config.key},
     body:JSON.stringify(body), signal:timeoutSignal()
   });
   if (!response.ok) throw new Error("Request failed " + response.status);
   return response.json();
 }
-const rpc = (name, body, token) => testing ? demoRpc(name,body) : request("/rest/v1/rpc/sakura_"+name,body,token);
+const rpc = (name, body) => testing ? demoRpc(name,body) : request("/rest/v1/rpc/sakura_"+name,body);
 function studentFromForm(form, allowNew) {
   const fields = new FormData(form);
   selection.class = String(fields.get("class"));
@@ -361,8 +360,8 @@ async function board() {
 async function teacher(offset=0) {
   if (!teacherToken) {
     show("teacher",panel(heading("教師入口","教師登入")+
-      '<form id="teacher-form" class="teacher-form"><label>電郵<input name="email" type="email" autocomplete="username" required></label>' +
-      '<label>密碼<input name="password" type="password" autocomplete="current-password" required></label>'+
+      '<form id="teacher-form" class="teacher-form">' +
+      '<label>密碼<input name="password" type="password" autocomplete="current-password" maxlength="72" required></label>'+
       '<button class="primary">登入</button><p class="status" role="status"></p></form>',true));
     return;
   }
@@ -371,7 +370,7 @@ async function teacher(offset=0) {
     '<button class="outline" data-logout>登出</button></div><p class="status" role="status"></p>'));
   const target=document.querySelector("#records");
   try {
-    const rows=await rpc("teacher",{p_offset:offset},teacherToken);
+    const rows=await rpc("teacher_password_records",{p_token:teacherToken,p_offset:offset});
     if (stamp!==version) return;
     target.innerHTML=(rows.length?recordMarkup(rows,true):'<p class="empty">暫時未有學生紀錄。</p>')+
       '<div class="actions">'+(offset?'<button class="outline" data-teacher="'+(offset-100)+'">上一頁</button>':'')+
@@ -380,7 +379,7 @@ async function teacher(offset=0) {
     if (stamp!==version) return;
     teacherToken=null;
     teacher();
-    status("無法開啟教師紀錄。請檢查帳戶權限或重新登入。",true);
+    status("無法開啟教師紀錄，請重新登入。",true);
   }
 }
 async function teacherLogin(form){
@@ -389,14 +388,18 @@ async function teacherLogin(form){
   form.querySelector("button").disabled=true;
   try {
     if (testing) throw Error("Demo");
-    const result=await request("/auth/v1/token?grant_type=password",{email:fields.get("email"),password:fields.get("password")});
-    if (stamp!==version) return;
-    teacherToken=result.access_token;
+    const token=await rpc("teacher_password_login",{p_password:fields.get("password")});
+    if (!token) throw Error("Login rejected");
+    if (stamp!==version) {
+      rpc("teacher_password_logout",{p_token:token}).catch(()=>{});
+      return;
+    }
+    teacherToken=token;
     teacher();
   } catch {
     if (stamp!==version) return;
     form.querySelector("button").disabled=false;
-    status("登入失敗。請檢查電郵和密碼。",true);
+    status("未能登入，請檢查密碼或稍後再試。",true);
   }
 }
 async function exportCsv(button) {
@@ -406,7 +409,7 @@ async function exportCsv(button) {
     const lines=[["班別","學號","練習","回合編號","開始時間（香港）","完成狀態","本回分數","題號","題目","作答","正確答案","是否答對","逐題用時（秒）","累計用時（秒）"]];
     let offset=0, rows;
     do {
-      rows=await rpc("teacher",{p_offset:offset},teacherToken);
+      rows=await rpc("teacher_password_records",{p_token:teacherToken,p_offset:offset});
       rows.forEach(r=>r.answers.forEach((a,i)=>lines.push([r.class,r.number,modes[r.mode].name,r.id,date(r.started),
         r.finished?"完成":"未完成",r.score,i+1,a.prompt,formatAnswer(a.answer),formatAnswer(a.expected),a.correct?"是":"否",a.seconds,a.elapsed])));
       offset+=rows.length;
@@ -444,7 +447,11 @@ document.addEventListener("click",event=>{
   if (button.hasAttribute("data-teacher")) teacher(Number(button.dataset.teacher));
   if (button.hasAttribute("data-switch")) {profile=null; selection.class="";selection.number="";home();}
   if (button.hasAttribute("data-export")) exportCsv(button);
-  if (button.hasAttribute("data-logout")) {teacherToken=null;teacher();}
+  if (button.hasAttribute("data-logout")) {
+    if(teacherToken)rpc("teacher_password_logout",{p_token:teacherToken}).catch(()=>{});
+    teacherToken=null;
+    teacher();
+  }
 });
 screen.addEventListener("change",event=>{
   if (event.target.id==="board-mode") {boardFilter=event.target.value;board();}
