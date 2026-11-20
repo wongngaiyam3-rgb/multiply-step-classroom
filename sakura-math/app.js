@@ -2,8 +2,8 @@
 const modes = {
   mul: {name:"乘法", note:"兩位數及三位數 × 兩位數", mark:"×", colors:["#e4ede7","#225c4d"]},
   div: {name:"除法", note:"兩位數或三位數 ÷ 兩位數", mark:"÷", colors:["#e4ebf7","#324f7d"]},
-  multiple: {name:"倍數", note:"找出指定數的倍數", mark:"倍", colors:["#dff0f1","#20626a"]},
-  factor: {name:"因數", note:"辨認指定數的因數", mark:"因", colors:["#f6eadb","#814c2a"]}
+  multiple: {name:"倍數", note:"寫出指定範圍內的所有正倍數", mark:"倍", colors:["#dff0f1","#20626a"]},
+  factor: {name:"因數", note:"寫出一個數的所有正因數", mark:"因", colors:["#f6eadb","#814c2a"]}
 };
 const screen = document.querySelector("#screen");
 const quizWeather = document.querySelector("#quiz-weather");
@@ -78,38 +78,38 @@ function celebrate() {
 }
 quizWeather.innerHTML = snowflakes(28);
 function randomInt(lo, hi) { return lo+Math.floor(Math.random()*(hi-lo+1)); }
+const listMode = topic => topic === "multiple" || topic === "factor";
+const formatAnswer = value => Array.isArray(value) ? value.join("、") : value;
 function demoQuestions(topic) {
   const questions = [];
+  const caps = [30,40,50,60,80,100];
   while (questions.length < 10) {
-    let b = randomInt(10,99), a = randomInt(10,99), expected, prompt, choices;
+    let a, b, prompt, expected;
     if (topic === "mul") {
-      if (questions.length%2) a = randomInt(100,999);
+      a = questions.length%2 ? randomInt(100,999) : randomInt(10,99);
+      b = randomInt(10,99);
       prompt = a+" × "+b; expected = a*b;
     } else if (topic === "div") {
       b = randomInt(10,30); a = randomInt(3,30);
       prompt = a*b+" ÷ "+b; expected = a;
     } else if (topic === "multiple") {
-      b = randomInt(2,12); expected = b*randomInt(3,11);
-      prompt = "哪一個數是 "+b+" 的倍數？";
-      choices = [expected,expected-1,expected+1,expected+(b===2?3:2)];
+      a = caps[randomInt(0,caps.length-1)]; b = randomInt(2,12);
+      const count = Math.floor(a/b);
+      if (count<4 || count>10) continue;
+      prompt = "寫出 "+a+" 以內 "+b+" 的所有正倍數。";
+      expected = Array.from({length:count},(_,i)=>(i+1)*b);
     } else {
-      b = randomInt(2,10); a = b*randomInt(3,11); expected = b;
-      prompt = "哪一個數是 "+a+" 的因數？";
-      choices = [expected,...Array.from({length:14},(_,i)=>i+2).filter(n=>a%n).slice(0,3)];
+      a = randomInt(12,100);
+      prompt = "寫出 "+a+" 的所有正因數。";
+      expected = Array.from({length:a},(_,i)=>i+1).filter(n=>a%n===0);
     }
     if (questions.some(q=>q.prompt===prompt)) continue;
-    if (choices) {
-      for (let i=choices.length-1;i>0;i--) {
-        const j=randomInt(0,i);
-        [choices[i],choices[j]]=[choices[j],choices[i]];
-      }
-    }
-    questions.push({prompt,expected,choices});
+    questions.push({prompt,expected,entry:listMode(topic)?"list":undefined});
   }
   return questions;
 }
 async function demoRpc(name, body) {
-  if (name === "start") {
+  if (name === "start" || name === "start_lists") {
     if (!demoRounds.has(body.p_id)) demoRounds.set(body.p_id, {
       id:body.p_id, pass:body.p_pass, mode:body.p_mode, class:body.p_class, number:body.p_number,
       started:new Date().toISOString(), questions:demoQuestions(body.p_mode), answers:[], score:0
@@ -117,11 +117,15 @@ async function demoRpc(name, body) {
     const r = demoRounds.get(body.p_id);
     return {id:r.id,alias:"DEMO",questions:r.questions,started:r.started};
   }
-  if (name === "answer") {
+  if (name === "answer" || name === "answer_list") {
     const r=demoRounds.get(body.p_id), q=r.questions[body.p_index];
     if (r.answers[body.p_index]) return r.answers[body.p_index];
     const elapsed=Math.floor((Date.now()-Date.parse(r.started))/1000);
-    const item={prompt:q.prompt,expected:q.expected,answer:body.p_value,correct:q.expected===body.p_value,
+    const answer=body.p_values ?? body.p_value;
+    const correct=Array.isArray(answer)
+      ? answer.length===q.expected.length && [...answer].sort((a,b)=>a-b).every((v,i)=>v===q.expected[i])
+      : answer===q.expected;
+    const item={prompt:q.prompt,expected:q.expected,answer,correct,
       elapsed,seconds:elapsed-(r.answers[r.answers.length-1]?.elapsed ?? 0)};
     r.answers.push(item);
     r.score+=Number(item.correct);
@@ -208,7 +212,7 @@ async function start(form) {
   button.disabled=true;
   status("正在準備新題目…");
   try {
-    const result=await rpc("start",{p_pass:student.pass,p_id:startId,p_class:student.class,p_number:student.number,p_mode:chosenMode});
+    const result=await rpc(listMode(chosenMode)?"start_lists":"start",{p_pass:student.pass,p_id:startId,p_class:student.class,p_number:student.number,p_mode:chosenMode});
     if (stamp!==version) return;
     student.alias=testing ? result.alias : undefined;
     remember(student);
@@ -224,17 +228,20 @@ async function start(form) {
 }
 function question() {
   const count=round.answers.length, q=round.questions[count], m=modes[round.mode];
+  const list = q.entry === "list";
+  const input = list
+    ? '<label class="field">你的答案<input name="answer" type="text" maxlength="143" autocapitalize="off" autocomplete="off" spellcheck="false" aria-describedby="list-hint" placeholder="例如 2, 4, 6" required></label>' +
+      '<p id="list-hint" class="hint">用逗號、頓號或空格分隔。每個數字只寫一次，次序不限。</p>'
+    : '<input name="answer" aria-label="你的答案" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{1,6}" autocomplete="off" placeholder="輸入答案" required>';
   const body='<div class="quiz-banner"><div class="snow-layer banner-snow" aria-hidden="true">' +
     snowflakes(13) + '</div><div class="meta"><span>' + escape(profile.class) + ' · ' + profile.number + ' 號</span>' +
     '<time class="clock" id="clock">00:00</time></div>' +
     '<div class="progress" aria-label="已完成 ' + count + ' 題">' +
     Array.from({length:10},(_,i)=>'<i class="' + (i<count?"done":i===count?"now":"") + '"></i>').join("") +
     '</div></div><div class="kicker">' + m.name + ' · 第 ' + (count+1) + ' / 10 題</div><h1 tabindex="-1" class="problem' +
-    (q.choices?' words':'') + '">' + escape(q.prompt) + (q.choices?'':' ＝ ？') + '</h1>' +
-    '<form id="answer-form" class="answer-form">' + (q.choices ?
-      '<div class="choices" role="group" aria-label="選擇答案">' + q.choices.map(v=>'<button type="button" class="outline" data-choice="' + v + '" aria-pressed="false">' + v + '</button>').join("") + '</div>' :
-      '<input name="answer" aria-label="你的答案" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{1,6}" autocomplete="off" placeholder="輸入答案" required>') +
-    '<button class="primary" ' + (q.choices?"disabled":"") + '>提交答案</button><p class="status" role="status"></p></form>';
+    (list?' words':'') + '">' + escape(q.prompt) + (list?'':' ＝ ？') + '</h1>' +
+    '<form id="answer-form" class="answer-form">' + input +
+    '<button class="primary">提交答案</button><p class="status" role="status"></p></form>';
   show("quiz",panel(body,true));
   const clock=document.querySelector("#clock");
   const tick=()=>{clock.textContent=duration(Math.floor((Date.now()-round.clock)/1000));};
@@ -242,15 +249,25 @@ function question() {
   ticker=setInterval(tick,250);
 }
 async function answer(form) {
-  const selected=form.querySelector('[aria-pressed="true"]');
-  const value=selected?.dataset.choice ?? new FormData(form).get("answer");
-  if (!/^\d{1,6}$/.test(value ?? "")) return;
-  const button=form.querySelector(".primary");
-  const stamp=version, index=round.answers.length;
-  Array.from(form.querySelectorAll("button,input")).forEach(el=>{el.disabled=true;});
+  const index = round.answers.length;
+  const list = round.questions[index].entry === "list";
+  const input = form.elements.answer;
+  const value = input.value.normalize("NFKC").trim();
+  const fields = value.split(/[,、\s]+/).filter(Boolean);
+  if (list ? !fields.length || fields.length>24 || fields.some(v=>!/^\d{1,3}$/.test(v))
+    : !/^\d{1,6}$/.test(value)) {
+    status(list ? "請輸入答案，並用逗號、頓號或空格分隔。" : "請輸入整數答案。", true);
+    input.focus();
+    return;
+  }
+  const payload = list ? {p_values:fields.map(Number)} : {p_value:Number(value)};
+  const button = form.querySelector(".primary");
+  const stamp = version;
+  input.readOnly = true;
+  button.disabled = true;
   status("正在儲存答案…");
   try {
-    const saved=await rpc("answer",{p_pass:profile.pass,p_id:round.id,p_index:index,p_value:Number(value)});
+    const saved=await rpc(list?"answer_list":"answer",{p_pass:profile.pass,p_id:round.id,p_index:index,...payload});
     if (stamp!==version) return;
     round.answers.push(saved);
     if (index===9) {
@@ -261,7 +278,7 @@ async function answer(form) {
     const feedback=document.createElement("p");
     feedback.className="feedback"+(saved.correct?"":" wrong");
     feedback.setAttribute("role","status");
-    feedback.textContent=saved.correct?"答對了！":"這題答案是 "+saved.expected+"。";
+    feedback.textContent=saved.correct?"答對了！":"這題答案是 "+formatAnswer(saved.expected)+"。";
     const next=document.createElement("button");
     next.type="button";
     next.className="primary";
@@ -274,18 +291,13 @@ async function answer(form) {
     button.disabled=false;
     button.textContent="重試儲存";
     status("暫時未能確認已儲存。請檢查網絡後重試。",true);
-    if (!selected) {
-      const input=form.elements.answer;
-      input.disabled=false;
-      input.readOnly=true;
-    }
   }
 }
 function table(answers) {
   return '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">題目</th><th scope="col">你的答案</th>' +
     '<th scope="col">正確答案</th><th scope="col">結果</th><th scope="col">用時</th></tr></thead><tbody>' +
-    answers.map(a=>'<tr><td>' + escape(a.prompt) + '</td><td>' + escape(a.answer) + '</td><td>' +
-      escape(a.expected) + '</td><td class="' + (a.correct?'good">答對':'bad">需訂正') +
+    answers.map(a=>'<tr><td>' + escape(a.prompt) + '</td><td>' + escape(formatAnswer(a.answer)) + '</td><td>' +
+      escape(formatAnswer(a.expected)) + '</td><td class="' + (a.correct?'good">答對':'bad">需訂正') +
       '</td><td>' + duration(a.seconds) + '</td></tr>').join("") + '</tbody></table></div>';
 }
 function result() {
@@ -396,7 +408,7 @@ async function exportCsv(button) {
     do {
       rows=await rpc("teacher",{p_offset:offset},teacherToken);
       rows.forEach(r=>r.answers.forEach((a,i)=>lines.push([r.class,r.number,modes[r.mode].name,r.id,date(r.started),
-        r.finished?"完成":"未完成",r.score,i+1,a.prompt,a.answer,a.expected,a.correct?"是":"否",a.seconds,a.elapsed])));
+        r.finished?"完成":"未完成",r.score,i+1,a.prompt,formatAnswer(a.answer),formatAnswer(a.expected),a.correct?"是":"否",a.seconds,a.elapsed])));
       offset+=rows.length;
     } while (rows.length===100);
     const csv="\uFEFF"+lines.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");
@@ -427,10 +439,6 @@ document.addEventListener("click",event=>{
     window.history.replaceState(null,"","?"+params.toString());
     document.querySelectorAll("[data-mode]").forEach(el=>el.setAttribute("aria-pressed",String(el===button)));
     document.querySelector("#picked").textContent=modes[mode].name;
-  }
-  if (button.dataset.choice) {
-    screen.querySelectorAll("[data-choice]").forEach(el=>el.setAttribute("aria-pressed",String(el===button)));
-    screen.querySelector("#answer-form .primary").disabled=false;
   }
   if (button.hasAttribute("data-history")) history(Number(button.dataset.history));
   if (button.hasAttribute("data-teacher")) teacher(Number(button.dataset.teacher));
