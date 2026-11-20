@@ -1,0 +1,22 @@
+.quiz-weather {
+  background:
+    linear-gradient(180deg, #edf8fc1a, #e3eff721 55%, #eaf5fa38),
+    url("./factors-winter-scene.svg") center 62% / cover no-repeat,
+    #d9ecf3;
+}
+
+.quiz-weather:not([hidden]) ~ main .panel {
+  box-shadow: 0 12px 35px #16364438;
+}
+
+.quiz-weather:not([hidden]) ~ .footer {
+  padding: 0 12px;
+  border-radius: 12px;
+  background: #f5faf9ed;
+}
+
+@media (orientation: portrait) {
+  .quiz-weather {
+    background-position: center, 31% center;
+  }
+}
