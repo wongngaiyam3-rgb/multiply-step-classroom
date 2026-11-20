@@ -7,6 +7,8 @@ const demo = new URLSearchParams(location.search).get("demo") === "1";
 const questionsPerLevel = 3;
 const maxOptions = 6;
 const milestone = questionsPerLevel * maxOptions;
+const challengeOptions = 8;
+const challengeAnswers = 6;
 const classes = ["4A","4B","4C"];
 let player = null;
 let pool = [];
@@ -45,7 +47,7 @@ function shuffle(items) {
   }
   return items;
 }
-function nextQuestion(optionCount) {
+function nextQuestion(optionCount, answerCount=1) {
   if(!pool.length){
     pool=shuffle(range(8).flatMap(base=>range(8).map(factor=>[base+1,factor])));
     const last=pool.length-1;
@@ -55,9 +57,13 @@ function nextQuestion(optionCount) {
   }
   const [base,factor]=pool.pop();
   const target=base*factor;
-  const distractors=range(target+8).filter(value=>value>=target-8&&value%base!==0);
-  const options=shuffle([target,...shuffle(distractors).slice(0,optionCount-1)]);
-  return {base,factor,target,options};
+  const otherFactors=range(9).filter(value=>value!==factor);
+  const answers=[target,...shuffle(otherFactors).slice(0,answerCount-1).map(value=>value*base)];
+  const distractors=answerCount===1
+    ? range(target+8).filter(value=>value>=target-8&&value%base!==0)
+    : [...new Set(answers.flatMap(value=>[value-1,value+1]))];
+  const options=shuffle([...answers,...shuffle(distractors).slice(0,optionCount-answerCount)]);
+  return {base,factor,target,options,answerCount};
 }
 
 function home(focus=true) {
@@ -68,7 +74,7 @@ function home(focus=true) {
     '<div class="hero-copy"><div class="kicker">四年級 · 不計分練習 <span class="festive-pine" aria-hidden="true">✦</span></div>'+
     '<h1 tabindex="-1">倍數入門</h1><p>選出倍數，跟着小狐狸一步步想。</p></div></section>'+
     '<section class="card join"><h2>準備好就開始</h2>'+
-    '<p class="lead">每題選一個數字。先看 3 題示範，之後選項逐步增加，最多有 6 個。答錯可看解題步驟，再試一次。</p>'+
+    '<p class="lead">先看 3 題示範，再從逐步增加的選項中選一個倍數。第 19 題起，從 8 個數字中選出 6 個倍數。答錯可看步驟，再試一次。</p>'+
     '<form id="start"><div class="fields"><label class="field">班別<select name="class" required>'+
     '<option value="">請選班別</option>'+opt(classes,player?.class)+'</select></label>'+
     '<label class="field">學號<select name="number" required><option value="">請選學號</option>'+
@@ -77,48 +83,96 @@ function home(focus=true) {
 }
 
 function question(){
-  const optionCount=Math.min(maxOptions,Math.floor(index/questionsPerLevel)+1);
-  currentQuestion=nextQuestion(optionCount);
+  const multi=index>=milestone;
+  const optionCount=multi?challengeOptions:Math.floor(index/questionsPerLevel)+1;
+  currentQuestion=nextQuestion(optionCount,multi?challengeAnswers:1);
   const {base,factor,target,options}=currentQuestion;
+  const title=multi?'選出 '+base+' 的 '+challengeAnswers+' 個倍數。':'哪一個數是 <strong>'+base+'</strong> 的倍數？';
   show("quiz",panel('<div class="quiz-banner"><div class="snow-layer banner-snow" aria-hidden="true">'+snow(12)+'</div>'+
     '<div class="meta"><span>第 '+(index+1)+' 題</span><span>'+(optionCount===1?"跟着示範":optionCount+" 個選項")+'</span></div></div>'+
-    '<h1 tabindex="-1" class="problem words intro-question">哪一個數是 <strong>'+base+'</strong> 的倍數？</h1>'+
-    (optionCount===1?'<p class="lead">'+base+' × '+factor+' ＝ '+target+'。點選 '+target+'，看看為甚麼。</p>':'')+
+    '<h1 tabindex="-1" class="problem words intro-question">'+title+'</h1>'+
+    (optionCount===1?'<p class="lead">'+base+' × '+factor+' ＝ '+target+'。點選 '+target+'，跟着試一次。</p>':'')+
     '<div class="choices" role="group" aria-label="答案選項">'+options.map(v=>
-      '<button class="outline pick-number" type="button" data-pick="'+v+'">'+v+'</button>').join("")+'</div>'+
+      '<button class="outline pick-number" type="button" data-pick="'+v+'"'+(multi?' aria-pressed="false"':'')+'>'+v+'</button>').join("")+'</div>'+
+    (multi?'<p id="selection-count" class="hint" role="status">已選 0 / '+challengeAnswers+' 個</p>'+
+      '<div class="actions"><button type="button" class="primary" data-check>提交答案</button></div>':'')+
     '<div id="feedback" class="intro-feedback" role="status"></div>'+
     '<p id="save-status" class="status" role="status"></p>'+
     '<button type="button" class="outline" data-save hidden>重試儲存</button>'));
   updateCompletionNotice();
 }
 
+function showCorrect(message){
+  screen.querySelectorAll("[data-pick]").forEach(option=>{option.disabled=true;});
+  const check=screen.querySelector("[data-check]");
+  if(check)check.disabled=true;
+  const feedback=document.querySelector("#feedback");
+  feedback.className="intro-feedback feedback";
+  feedback.innerHTML='<h2>答對了！</h2><p>'+message+'</p>'+
+    '<div class="actions"><button class="primary" data-next>下一題</button></div>';
+  feedback.querySelector("[data-next]").focus();
+}
+
+function showSteps(choice,retry){
+  const {base}=currentQuestion;
+  const lower=Math.floor(choice/base);
+  const comparison=lower===0 ? base+' × 1 ＝ '+base+'，而 '+choice+' 比 '+base+' 小。' :
+    base+' × '+lower+' ＝ '+base*lower+'，'+base+' × '+(lower+1)+' ＝ '+base*(lower+1)+'。'+
+    choice+' 在 '+base*lower+' 和 '+base*(lower+1)+' 之間。';
+  const feedback=document.querySelector("#feedback");
+  feedback.className="intro-feedback feedback wrong";
+  feedback.innerHTML='<h2 tabindex="-1">一起看解題步驟</h2><ol>'+
+    '<li>把 '+base+' 乘 1、2、3……，就會得到 '+base+' 的倍數。</li>'+
+    '<li>'+comparison+'</li>'+
+    '<li>所以 '+choice+' 不是 '+base+' 的倍數。'+retry+'</li></ol>';
+  feedback.querySelector("h2").focus();
+}
+
+const selectedOptions=()=>Array.from(screen.querySelectorAll('[data-pick][aria-pressed="true"]'));
 function pick(button){
   if(page!=="quiz"||button.disabled)return;
   const choice=Number(button.dataset.pick);
-  const {base,factor,target}=currentQuestion;
-  const feedback=document.querySelector("#feedback");
+  const {base,factor,target,answerCount}=currentQuestion;
+  if(answerCount>1){
+    const count=selectedOptions().length;
+    const selected=button.getAttribute("aria-pressed")==="true";
+    const notice=document.querySelector("#selection-count");
+    if(!selected&&count===answerCount){
+      notice.textContent="已選 "+answerCount+" 個。要更換答案，先取消一個。";
+      return;
+    }
+    button.setAttribute("aria-pressed",String(!selected));
+    delete button.dataset.state;
+    notice.textContent="已選 "+(count+(selected?-1:1))+" / "+answerCount+" 個";
+    return;
+  }
   if(choice===target){
     button.dataset.state="right";
-    screen.querySelectorAll("[data-pick]").forEach(option=>{option.disabled=true;});
-    feedback.className="intro-feedback feedback";
-    feedback.innerHTML='<h2>答對了！</h2><p>'+base+' × '+factor+' ＝ '+target+'，所以 '+target+' 是 '+base+' 的倍數。</p>'+
-      '<div class="actions"><button class="primary" data-next>下一題</button></div>';
-    feedback.querySelector("[data-next]").focus();
+    showCorrect(base+' × '+factor+' ＝ '+target+'，所以 '+target+' 是 '+base+' 的倍數。');
     return;
   }
   button.dataset.state="wrong";
   button.disabled=true;
   button.setAttribute("aria-label",choice+"，已選，答錯");
-  const lower=Math.floor(choice/base);
-  const comparison=lower===0 ? base+' × 1 ＝ '+base+'，而 '+choice+' 比 '+base+' 小。' :
-    base+' × '+lower+' ＝ '+base*lower+'，'+base+' × '+(lower+1)+' ＝ '+base*(lower+1)+'。'+
-    choice+' 在 '+base*lower+' 和 '+base*(lower+1)+' 之間。';
-  feedback.className="intro-feedback feedback wrong";
-  feedback.innerHTML='<h2 tabindex="-1">一起看解題步驟</h2><ol>'+
-    '<li>把 '+base+' 乘 1、2、3……，就會得到 '+base+' 的倍數。</li>'+
-    '<li>'+comparison+'</li>'+
-    '<li>所以 '+choice+' 不是 '+base+' 的倍數。再選一個數字試試。</li></ol>';
-  feedback.querySelector("h2").focus();
+  showSteps(choice,"再選一個數字試試。");
+}
+
+function checkSelection(){
+  const {base,answerCount}=currentQuestion;
+  const selected=selectedOptions();
+  if(selected.length!==answerCount){
+    document.querySelector("#selection-count").textContent=
+      "已選 "+selected.length+" 個，請再選 "+(answerCount-selected.length)+" 個。";
+    return;
+  }
+  const incorrect=selected.filter(option=>Number(option.dataset.pick)%base!==0);
+  if(incorrect.length){
+    incorrect.forEach(option=>{option.dataset.state="wrong";});
+    showSteps(Number(incorrect[0].dataset.pick),"取消選取這個數字，再找一個倍數。");
+    return;
+  }
+  selected.forEach(option=>{option.dataset.state="right";});
+  showCorrect("你選的 "+answerCount+" 個數，都可以用 "+base+" 乘 1、2、3……中的其中一個數得到。");
 }
 
 async function request(path,body,token){
@@ -229,6 +283,7 @@ document.addEventListener("click",e=>{
   const b=e.target.closest("button");
   if(!b)return;
   if(b.hasAttribute("data-pick"))pick(b);
+  if(b.hasAttribute("data-check")&&!b.disabled)checkSelection();
   if(b.hasAttribute("data-next")){
     index++;
     question();
