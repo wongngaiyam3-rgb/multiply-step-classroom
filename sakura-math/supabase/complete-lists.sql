@@ -27,7 +27,7 @@ begin
       from (
         select n,cap from generate_series(2,12) n
         cross join unnest(array[30,40,50,60,80,100]) cap
-        where (cap-1)/n between 4 and 10 order by random() limit 10
+        where (cap-1)/n between 4 and 6 order by random() limit 10
       ) m;
     else
       select jsonb_agg(jsonb_build_object(
