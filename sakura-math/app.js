@@ -2,7 +2,7 @@
 const modes = {
   mul: {name:"乘法", note:"兩位數及三位數 × 兩位數", mark:"×", colors:["#e4ede7","#225c4d"]},
   div: {name:"除法", note:"兩位數或三位數 ÷ 兩位數", mark:"÷", colors:["#e4ebf7","#324f7d"]},
-  multiple: {name:"倍數", note:"寫出指定範圍內的所有正倍數", mark:"倍", colors:["#dff0f1","#20626a"]},
+  multiple: {name:"倍數", note:"寫出小於指定上限的所有倍數", mark:"倍", colors:["#dff0f1","#20626a"]},
   factor: {name:"因數", note:"寫出一個數的所有正因數", mark:"因", colors:["#f6eadb","#814c2a"]}
 };
 const screen = document.querySelector("#screen");
@@ -94,9 +94,9 @@ function demoQuestions(topic) {
       prompt = a*b+" ÷ "+b; expected = a;
     } else if (topic === "multiple") {
       a = caps[randomInt(0,caps.length-1)]; b = randomInt(2,12);
-      const count = Math.floor(a/b);
+      const count = Math.floor((a - 1) / b);
       if (count<4 || count>10) continue;
-      prompt = "寫出 "+a+" 以內 "+b+" 的所有正倍數。";
+      prompt = "寫出 "+b+" 的倍數中，小於 "+a+" 的所有數。";
       expected = Array.from({length:count},(_,i)=>(i+1)*b);
     } else {
       a = randomInt(12,100);
