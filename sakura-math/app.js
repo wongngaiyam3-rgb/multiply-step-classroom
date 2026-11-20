@@ -12,11 +12,13 @@ const storageKey = "sakura-math-v1";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const params = new URLSearchParams(location.search);
 const testing = params.get("demo") === "1";
-let mode = Object.prototype.hasOwnProperty.call(modes, params.get("mode")) ? params.get("mode") : "mul";
-let view = "", profile, round, ticker, teacherToken, boardFilter = "", version = 0;
+const practice = document.body.dataset.practice;
+const requestedMode = practice || params.get("mode");
+let mode = Object.prototype.hasOwnProperty.call(modes, requestedMode) ? requestedMode : "mul";
+let view = "", profile, round, ticker, teacherToken, boardFilter = practice || "", version = 0;
 let startId, startKey;
 const demoRounds = new Map();
-const selection = {class:"", number:"", pass:""};
+const selection = {class:"", number:""};
 
 function storeRead() {
   try { return JSON.parse(localStorage.getItem(storageKey)) || {}; }
@@ -149,18 +151,17 @@ async function request(path, body, token) {
   return response.json();
 }
 const rpc = (name, body, token) => testing ? demoRpc(name,body) : request("/rest/v1/rpc/sakura_"+name,body,token);
-function createProfile(form) {
+function studentFromForm(form, allowNew) {
   const fields = new FormData(form);
-  selection.class=String(fields.get("class"));
-  selection.number=String(fields.get("number"));
-  selection.pass=String(fields.get("pass") || "").trim().toLowerCase();
-  const key=selection.class+"-"+selection.number;
-  const data=testing ? {} : storeRead();
-  const pass=selection.pass || data[key]?.pass ||
-    (profile?.key===key ? profile.pass : crypto.randomUUID());
-  if (!uuidPattern.test(pass)) throw Error("取回碼格式有誤，請貼上完整取回碼。");
-  return {key,pass,class:selection.class,number:Number(selection.number),
-    alias:data[key]?.pass===pass ? data[key]?.alias : undefined};
+  selection.class = String(fields.get("class"));
+  selection.number = String(fields.get("number"));
+  const key = selection.class + "-" + selection.number;
+  const data = testing ? {} : storeRead();
+  const saved = data[key]?.pass;
+  const existing = profile?.key === key ? profile.pass : saved;
+  const pass = uuidPattern.test(existing || "") ? existing : allowNew ? crypto.randomUUID() : null;
+  if (!pass) return null;
+  return {key, pass, class:selection.class, number:Number(selection.number)};
 }
 function remember(student) {
   if (testing) return;
@@ -169,34 +170,35 @@ function remember(student) {
   data.last=student.key;
   storeWrite(data);
 }
-function transferForm(required=false) {
-  return '<form id="' + (required?"history-identity":"join-form") + '"><div class="fields">' +
+function studentForm(historyForm=false) {
+  return '<form id="' + (historyForm?"history-identity":"join-form") + '"><div class="fields">' +
     '<label class="field">班別<select name="class" required>' + classOptions(selection.class) + '</select></label>' +
     '<label class="field">學號<select name="number" required>' + numberOptions(selection.number) + '</select></label></div>' +
-    '<button class="primary">' + (required?"查看紀錄":"開始練習") + '</button>' +
-    '<details><summary>換裝置取回紀錄</summary><p>請選原來的班別及學號，並貼上從「練習紀錄」取得的取回碼。</p>' +
-    '<input name="pass" type="text" aria-label="學生取回碼" placeholder="貼上取回碼" autocomplete="off" autocapitalize="none" spellcheck="false"></details>' +
+    '<button class="primary">' + (historyForm?"查看紀錄":"開始練習") + '</button>' +
     '<p class="status" role="status"></p></form>';
 }
 function home(focus=true) {
   const picked=modes[mode];
-  show("home", '<div class="landing"><section class="hero"><img class="landscape" src="./nordic-winter.svg" alt="北歐雪林中的小狐狸與木屋" fetchpriority="high">' +
-    '<div class="snow-layer hero-snow" aria-hidden="true">' + snowflakes(17) + '</div><div class="hero-copy"><div class="kicker">四年級 · 數學練習</div>' +
-    '<h1 tabindex="-1">雪林數學小屋</h1><p>每回隨機十題，跟着小狐狸練本領。</p></div></section>' +
-    '<section class="card join"><div class="kicker">' + (testing?"示範模式":"學生入口") + '</div><h2>準備出發！</h2>' +
-    '<p class="lead">選好班別和學號，就可以開始<span id="picked">' + picked.name + '</span>練習。</p>' +
-    transferForm() + '</section></div><section class="paths" aria-labelledby="path-head"><div class="paths-head">' +
+  const title = practice ? picked.name + "練習" : "雪林數學小屋";
+  const choices = practice ? "" :
+    '<section class="paths" aria-labelledby="path-head"><div class="paths-head">' +
     '<h2 id="path-head">選擇練習</h2><span>每回 10 題 · 完成後看結果</span></div><div class="mode-grid">' +
     Object.entries(modes).map(([id,m]) => '<button class="mode" type="button" data-mode="' + id + '" aria-pressed="' +
       (id===mode) + '" style="--tile:' + m.colors[0] + ';--tile-ink:' + m.colors[1] + '"><i aria-hidden="true">' +
       m.mark + '</i><span><strong>' + m.name + '</strong><small>' + m.note + '</small></span></button>').join("") +
-    '</div></section>', focus);
+    '</div></section>';
+  show("home", '<div class="landing"><section class="hero"><img class="landscape" src="./nordic-winter.svg" alt="北歐雪林中的小狐狸與木屋" fetchpriority="high">' +
+    '<div class="snow-layer hero-snow" aria-hidden="true">' + snowflakes(17) + '</div><div class="hero-copy"><div class="kicker">四年級 · 數學練習</div>' +
+    '<h1 tabindex="-1">' + title + '</h1><p>' + (practice ? picked.note + ' · 每回十題' : '每回隨機十題，跟着小狐狸練本領。') + '</p></div></section>' +
+    '<section class="card join"><div class="kicker">' + (testing?"示範模式":"學生入口") + '</div><h2>準備出發！</h2>' +
+    '<p class="lead">選好班別和學號，就可以開始<span id="picked">' + picked.name + '</span>練習。</p>' +
+    studentForm() + '</section></div>' + choices, focus);
 }
 async function start(form) {
   const button=form.querySelector(".primary");
   const stamp=version;
   let student;
-  try { student=createProfile(form); }
+  try { student=studentFromForm(form,true); }
   catch(e) { status(e.message,true); return; }
   const chosenMode=mode;
   const key=student.key+":"+chosenMode+":"+student.pass;
@@ -217,7 +219,7 @@ async function start(form) {
     if (stamp!==version) return;
     button.disabled=false;
     button.textContent="重試開始";
-    status("未能開始。請檢查網絡、班別及取回碼，然後重試。",true);
+    status("未能開始。請檢查網絡，然後重試。",true);
   }
 }
 function question() {
@@ -305,13 +307,11 @@ function recordMarkup(rows, teacher=false) {
 async function history(offset=0) {
   if (!profile) {
     show("history",panel(heading("學生紀錄","練習紀錄")+
-      '<p class="lead">選擇班別及學號。換了裝置時，另需輸入學生取回碼。</p>'+transferForm(true),true));
+      '<p class="lead">選擇班別及學號，查看在這個瀏覽器提交的練習。</p>'+studentForm(true),true));
     return;
   }
   const stamp=show("history",panel(heading(escape(profile.class)+" · "+profile.number+" 號","練習紀錄") +
-    '<div id="records">'+wait+'</div><details class="history-entry"><summary>學生取回碼</summary>' +
-    '<p>換裝置時可用這個代碼取回自己的紀錄。請妥善保管。</p><p class="code">' +
-    escape(profile.pass) + '</p></details><div class="actions">' + action("返回練習","home") +
+    '<div id="records">'+wait+'</div><div class="actions">' + action("返回練習","home") +
     '<button class="text-button" data-switch>更換學生</button></div>'));
   const target=document.querySelector("#records");
   try {
@@ -434,7 +434,7 @@ document.addEventListener("click",event=>{
   }
   if (button.hasAttribute("data-history")) history(Number(button.dataset.history));
   if (button.hasAttribute("data-teacher")) teacher(Number(button.dataset.teacher));
-  if (button.hasAttribute("data-switch")) {profile=null; selection.class="";selection.number="";selection.pass="";home();}
+  if (button.hasAttribute("data-switch")) {profile=null; selection.class="";selection.number="";home();}
   if (button.hasAttribute("data-export")) exportCsv(button);
   if (button.hasAttribute("data-logout")) {teacherToken=null;teacher();}
 });
@@ -451,9 +451,9 @@ screen.addEventListener("submit",event=>{
   if (form.id==="teacher-form") teacherLogin(form);
   if (form.id==="history-identity") {
     try {
-      const student=createProfile(form);
-      if (selection.pass || storeRead()[student.key]?.pass) {profile=student;history();}
-      else status("這部裝置沒有該學生的紀錄。請輸入取回碼，或先完成一回練習。",true);
+      const student=studentFromForm(form,false);
+      if (student) {profile=student;history();}
+      else status("這個瀏覽器尚無該學生的練習紀錄。",true);
     } catch(e) {status(e.message,true);}
   }
 });
