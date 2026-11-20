@@ -10,7 +10,7 @@
 | 除法 | `division/` | 兩位數或三位數除以兩位數，每題均可整除。 |
 | 倍數 | `multiples/` | 寫出小於指定上限的所有倍數，由該數本身開始列出。上限不算在內，每題有 4 至 6 個答案。 |
 | 因數 | `factors/` | 寫出指定數的所有正因數。 |
-| 倍數入門 | `multiples-beginner/` | 每回二十題，分四組，每組五題，分別選出一、二、四及六個倍數。答錯可看步驟及重答，不計分。完成一回時提交首次完成紀錄，之後可開新一回。 |
+| 倍數入門 | `multiples-beginner/` | 每回二十題，分四組，每組五題，分別選出一、二、四及六個倍數。答錯可看步驟及重答，不計分。每答對一題即提交進度，完成一回時記下首次完成時間，之後可開新一回。 |
 
 網站發佈在 GitHub Pages 的 `multiply-step-classroom/sakura-math/`。各專頁直接開啟指定練習。綜合首頁可切換四種練習，也支援原有的 `?mode=div`、`?mode=multiple` 及 `?mode=factor` 網址。獨立測試可加入 `?demo=1`。示範使用記憶體資料，每次重新載入便清空，適合試做及投影演示。
 
@@ -41,7 +41,7 @@
 
 ## 教師平台
 
-在網頁底部按「教師入口」，輸入教師密碼，即可查閱及匯出 CSV。倍數入門顯示首次完成時間，其餘練習顯示逐題作答。
+在網頁底部按「教師入口」，輸入教師密碼，即可查閱及匯出 CSV。倍數入門顯示按班別及學號累計的已完成題數，以及首次完成一回的時間。題數從功能啟用後累計，其餘練習顯示逐題作答。
 
 同系列的網站可沿用 `supabase/teacher-password.sql` 的登入服務。密碼以 bcrypt 雜湊存於 Supabase 私有 schema，登入有效期兩小時，登出會撤銷憑證。學生原始作答與教師設定由伺服器保護。
 
@@ -51,4 +51,4 @@
 
 沿用現有四個模式時，可直接派發相應的專頁網址。要調整題型或難度，在 `public.sakura_start` 或 `public.sakura_start_lists` 的對應模式修改數字範圍、題目與正確答案，再以遷移更新 Supabase。同步修改 `app.js` 中的模式描述及示範題。新增主題時也要更新資料表的模式限制。現有回合已保存當時的原題和答案。
 
-若移到另一個 Supabase 專案，依序執行 `schema.sql`、`ranking.sql`、`complete-lists.sql`、`multiples-beginner.sql`、`teacher-password.sql`，再填寫新的 `config.js` 和教師密碼雜湊。
+若移到另一個 Supabase 專案，依序執行 `schema.sql`、`ranking.sql`、`complete-lists.sql`、`multiples-beginner.sql`、`teacher-password.sql`、`multiples-beginner-progress.sql`，再填寫新的 `config.js` 和教師密碼雜湊。
