@@ -4,24 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="小四數學練習，每回十題，練習乘法、除法、倍數與因數。">
-  <meta name="theme-color" content="#fff9f5">
-  <title>櫻花數學道場</title>
-  <link rel="stylesheet" href="./style.css">
+  <meta name="theme-color" content="#edf5f6">
+  <title>雪林數學小屋</title>
+  <link rel="stylesheet" href="./style.css?v=nordic-1">
   <script defer src="./config.js"></script>
-  <script defer src="./app.js"></script>
+  <script defer src="./app.js?v=nordic-1"></script>
 </head>
 <body>
   <header class="masthead">
     <div class="header-inner">
-      <button class="brand" data-view="home"><i class="seal" aria-hidden="true">✿</i> 櫻花數學道場</button>
+      <button class="brand" data-view="home"><i class="seal" aria-hidden="true">❄</i> 雪林數學小屋</button>
       <nav aria-label="主要功能">
         <button data-view="history">練習紀錄</button>
         <button class="rank-nav" data-view="board"><span aria-hidden="true">♜</span> 排行榜</button>
       </nav>
     </div>
   </header>
+  <div id="quiz-weather" class="snow-layer quiz-weather" aria-hidden="true" hidden></div>
   <main id="screen"></main>
-  <footer class="footer"><span>櫻花數學道場 · 小四數學練習</span><button data-view="teacher">教師入口</button></footer>
+  <footer class="footer"><span>雪林數學小屋 · 小四數學練習</span><button data-view="teacher">教師入口</button></footer>
   <div id="celebration" class="celebration" aria-hidden="true"></div>
 </body>
 </html>
