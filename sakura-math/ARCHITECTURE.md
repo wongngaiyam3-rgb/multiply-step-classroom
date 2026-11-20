@@ -29,6 +29,7 @@
 | `supabase/schema.sql` | 獨立資料表、伺服器出題、計分、答題與教師權限。 |
 | `multiples-beginner/`、`supabase/multiples-beginner.sql` | 入門練習和獨立的首次完成紀錄。 |
 | `factors-practice.js`、`supabase/factors-practice.sql` | 兩個因數專頁的題目邏輯與獨立進度紀錄。 |
+| `factors-winter.css`、`factors-winter-scene.svg` | 因數填寫及選擇的答題雪景，與共用飄雪動畫疊合。 |
 | `supabase/complete-lists.sql` | 倍數及因數填寫題的出題及判分。 |
 | `supabase/ranking.sql` | 將各裝置的已提交題數按班別和學號合併，產生公開排行榜代號。 |
 
