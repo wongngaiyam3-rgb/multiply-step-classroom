@@ -20,7 +20,7 @@ let completion = null;
 let index = 0;
 let page = "";
 let teacherRows = [];
-let teacherSession = false;
+let teacherToken = null;
 
 const escape = value => String(value ?? "").replace(/[&<>"']/g, x => ({
   "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
@@ -178,19 +178,19 @@ function checkSelection(){
   showCorrect("你選的 "+answerCount+" 個數，都可以用 "+base+" 乘 1、2、3……中的其中一個數得到。");
 }
 
-async function request(path,body,token){
+async function request(path,body){
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),10000);
   try {
     const response=await fetch(config.url+path,{
-      method:"POST",headers:{apikey:config.key,"Content-Type":"application/json",
-        ...(token?{Authorization:"Bearer "+token}:{})},body:JSON.stringify(body),signal:controller.signal
+      method:"POST",headers:{apikey:config.key,"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller.signal
     });
     if(!response.ok)throw Error("Request failed");
     return await response.json();
   } finally {clearTimeout(timeout);}
 }
-const rpc=(name,body,token)=>request("/rest/v1/rpc/sakura_beginner_"+name,body,token);
+const rpc=(name,body)=>request("/rest/v1/rpc/sakura_beginner_"+name,body);
+const teacherRpc=(name,body)=>request("/rest/v1/rpc/sakura_teacher_password_"+name,body);
 function updateCompletionNotice(){
   const status=screen.querySelector("#save-status");
   const retry=screen.querySelector("[data-save]");
@@ -241,11 +241,11 @@ function finishRound(){
 }
 
 function teacherHome(){
-  teacherSession=false;
+  if(teacherToken)teacherRpc("logout",{p_token:teacherToken}).catch(()=>{});
+  teacherToken=null;
   teacherRows=[];
   show("teacher",panel('<h1 tabindex="-1">教師登入</h1><form id="teacher-login" class="teacher-form">'+
-    '<label>電郵<input name="email" type="email" autocomplete="username" required></label>'+
-    '<label>密碼<input name="password" type="password" autocomplete="current-password" required></label>'+
+    '<label>密碼<input name="password" type="password" autocomplete="current-password" maxlength="72" required></label>'+
     '<button class="primary">登入</button><p class="status" role="status"></p></form>'));
 }
 const hkDate=value=>new Date(value).toLocaleString("zh-HK",{timeZone:"Asia/Hong_Kong"});
@@ -255,13 +255,18 @@ async function teacherLogin(form){
   const status=form.querySelector(".status");
   button.disabled=true;
   status.textContent="正在登入…";
+  let token;
   try{
     if(demo)throw Error("Demo");
-    const auth=await request("/auth/v1/token?grant_type=password",{email:fields.get("email"),password:fields.get("password")});
-    const rows=await rpc("teacher",{},auth.access_token);
-    if(!form.isConnected)return;
+    token=await teacherRpc("login",{p_password:fields.get("password")});
+    if(!token)throw Error("Login rejected");
+    const rows=await teacherRpc("beginner",{p_token:token});
+    if(!form.isConnected){
+      teacherRpc("logout",{p_token:token}).catch(()=>{});
+      return;
+    }
     teacherRows=rows;
-    teacherSession=true;
+    teacherToken=token;
     const body=rows.map(r=>'<tr><td>'+escape(r.class)+'</td><td>'+escape(r.number)+'</td><td>'+
       escape(hkDate(r.completed))+'</td></tr>').join("");
     show("teacher",panel('<h1 tabindex="-1">倍數入門完成紀錄</h1>'+
@@ -271,12 +276,13 @@ async function teacherLogin(form){
       '<div class="actions"><button class="primary" data-export>匯出 CSV</button>'+
       '<button class="outline" data-logout>登出</button></div>'));
   }catch{
-    status.textContent="未能登入，請核對帳戶資料及教師權限。";
+    if(token)teacherRpc("logout",{p_token:token}).catch(()=>{});
+    status.textContent="未能登入，請檢查密碼或稍後再試。";
     button.disabled=false;
   }
 }
 function downloadRecords(){
-  if(!teacherSession)return;
+  if(!teacherToken)return;
   const cells=[["班別","學號","首次完成時間（香港）"],
     ...teacherRows.map(r=>[r.class,r.number,hkDate(r.completed)])];
   const csv="\uFEFF"+cells.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");
