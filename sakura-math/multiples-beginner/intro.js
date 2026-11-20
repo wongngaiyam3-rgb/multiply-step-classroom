@@ -4,10 +4,14 @@ const screen = document.querySelector("#screen");
 const weather = document.querySelector("#quiz-weather");
 const config = window.SAKURA_CONFIG;
 const demo = new URLSearchParams(location.search).get("demo") === "1";
-const roundSize = 10;
+const questionsPerLevel = 3;
+const maxOptions = 6;
+const milestone = questionsPerLevel * maxOptions;
 const classes = ["4A","4B","4C"];
 let player = null;
-let questions = [];
+let pool = [];
+let currentQuestion;
+let completion = null;
 let index = 0;
 let page = "";
 let teacherRows = [];
@@ -41,13 +45,19 @@ function shuffle(items) {
   }
   return items;
 }
-function makeQuestions() {
-  const pool=range(8).flatMap(i=>range(8).map(j=>[i+1,j]));
-  return shuffle(pool).slice(0,roundSize).map(([base,factor])=>{
-    const target=base*factor;
-    const distractors=range(target+4).filter(value=>value>=Math.max(1,target-4)&&value%base!==0);
-    return {base,factor,target,options:shuffle([target,...shuffle(distractors).slice(0,3)])};
-  });
+function nextQuestion(optionCount) {
+  if(!pool.length){
+    pool=shuffle(range(8).flatMap(base=>range(8).map(factor=>[base+1,factor])));
+    const last=pool.length-1;
+    if(currentQuestion?.base===pool[last][0]&&currentQuestion.factor===pool[last][1]){
+      [pool[0],pool[last]]=[pool[last],pool[0]];
+    }
+  }
+  const [base,factor]=pool.pop();
+  const target=base*factor;
+  const distractors=range(target+8).filter(value=>value>=target-8&&value%base!==0);
+  const options=shuffle([target,...shuffle(distractors).slice(0,optionCount-1)]);
+  return {base,factor,target,options};
 }
 
 function home(focus=true) {
@@ -58,7 +68,7 @@ function home(focus=true) {
     '<div class="hero-copy"><div class="kicker">四年級 · 不計分練習 <span class="festive-pine" aria-hidden="true">✦</span></div>'+
     '<h1 tabindex="-1">倍數入門</h1><p>選出倍數，跟着小狐狸一步步想。</p></div></section>'+
     '<section class="card join"><h2>準備好就開始</h2>'+
-    '<p class="lead">每回 10 題，每題選一個數字。答錯可看解題步驟，再試一次。</p>'+
+    '<p class="lead">每題選一個數字。先看 3 題示範，之後選項逐步增加，最多有 6 個。答錯可看解題步驟，再試一次。</p>'+
     '<form id="start"><div class="fields"><label class="field">班別<select name="class" required>'+
     '<option value="">請選班別</option>'+opt(classes,player?.class)+'</select></label>'+
     '<label class="field">學號<select name="number" required><option value="">請選學號</option>'+
@@ -66,29 +76,33 @@ function home(focus=true) {
     (demo?'<p class="hint">示範模式</p>':'')+'</section></div>',focus);
 }
 
-function question() {
-  const {base,options}=questions[index];
+function question(){
+  const optionCount=Math.min(maxOptions,Math.floor(index/questionsPerLevel)+1);
+  currentQuestion=nextQuestion(optionCount);
+  const {base,factor,target,options}=currentQuestion;
   show("quiz",panel('<div class="quiz-banner"><div class="snow-layer banner-snow" aria-hidden="true">'+snow(12)+'</div>'+
-    '<div class="meta"><span>第 '+(index+1)+' 題，共 '+roundSize+' 題</span><span>倍數入門</span></div>'+
-    '<div class="progress" aria-label="已完成 '+index+' 題">'+range(roundSize).map(n=>'<i class="'+
-      (n<=index?'done':n===index+1?'now':'')+'"></i>').join("")+'</div></div>'+
+    '<div class="meta"><span>第 '+(index+1)+' 題</span><span>'+(optionCount===1?"跟着示範":optionCount+" 個選項")+'</span></div></div>'+
     '<h1 tabindex="-1" class="problem words intro-question">哪一個數是 <strong>'+base+'</strong> 的倍數？</h1>'+
+    (optionCount===1?'<p class="lead">'+base+' × '+factor+' ＝ '+target+'。點選 '+target+'，看看為甚麼。</p>':'')+
     '<div class="choices" role="group" aria-label="答案選項">'+options.map(v=>
       '<button class="outline pick-number" type="button" data-pick="'+v+'">'+v+'</button>').join("")+'</div>'+
-    '<div id="feedback" class="intro-feedback" role="status"></div>'));
+    '<div id="feedback" class="intro-feedback" role="status"></div>'+
+    '<p id="save-status" class="status" role="status"></p>'+
+    '<button type="button" class="outline" data-save hidden>重試儲存</button>'));
+  updateCompletionNotice();
 }
 
 function pick(button){
   if(page!=="quiz"||button.disabled)return;
   const choice=Number(button.dataset.pick);
-  const {base,factor,target}=questions[index];
+  const {base,factor,target}=currentQuestion;
   const feedback=document.querySelector("#feedback");
   if(choice===target){
     button.dataset.state="right";
     screen.querySelectorAll("[data-pick]").forEach(option=>{option.disabled=true;});
     feedback.className="intro-feedback feedback";
     feedback.innerHTML='<h2>答對了！</h2><p>'+base+' × '+factor+' ＝ '+target+'，所以 '+target+' 是 '+base+' 的倍數。</p>'+
-      '<div class="actions"><button class="primary" data-next>'+(index+1===roundSize?"完成練習":"下一題")+'</button></div>';
+      '<div class="actions"><button class="primary" data-next>下一題</button></div>';
     feedback.querySelector("[data-next]").focus();
     return;
   }
@@ -120,29 +134,37 @@ async function request(path,body,token){
   } finally {clearTimeout(timeout);}
 }
 const rpc=(name,body,token)=>request("/rest/v1/rpc/sakura_beginner_"+name,body,token);
-async function finish(){
-  show("result",panel('<div class="kicker">倍數入門</div><h1 tabindex="-1">完成十題！</h1>'+
-    '<p class="lead">你已練習用乘法找倍數。</p><p id="save-status" class="status" role="status"></p>'+
-    '<div class="actions"><button type="button" class="primary" data-home>再練一回</button>'+
-    '<button type="button" class="outline" data-save hidden>重試儲存</button></div>'));
-  await saveCompletion();
-}
-async function saveCompletion(){
+function updateCompletionNotice(){
   const status=screen.querySelector("#save-status");
   const retry=screen.querySelector("[data-save]");
-  const again=screen.querySelector("[data-home]");
-  if(demo){status.textContent="示範完成。";return;}
-  again.disabled=true;
-  retry.hidden=true;
-  status.textContent="正在儲存完成紀錄…";
+  if(!status||!completion)return;
+  const messages={
+    pending:"正在儲存入門完成紀錄…",
+    saved:"入門練習已完成並儲存，可以繼續答題。",
+    failed:"未能儲存完成紀錄。可以重試儲存或繼續答題。",
+    demo:"入門示範已完成，可以繼續答題。"
+  };
+  status.textContent=messages[completion.state]||"";
+  retry.hidden=completion.state!=="failed";
+}
+async function saveCompletion(){
+  const record=completion;
+  if(record.state==="pending"||record.state==="saved")return;
+  if(demo){
+    record.state="demo";
+    updateCompletionNotice();
+    return;
+  }
+  record.state="pending";
+  updateCompletionNotice();
   try{
     const saved=await rpc("complete",{p_class:player.class,p_number:player.number});
     if(saved!==true)throw Error("Completion not saved");
-    status.textContent="完成紀錄已儲存。";
+    record.state="saved";
   }catch{
-    status.textContent="未能儲存完成紀錄，請檢查網絡後重試。";
-    retry.hidden=false;
-  }finally{again.disabled=false;}
+    record.state="failed";
+  }
+  if(record===completion)updateCompletionNotice();
 }
 
 function teacherHome(){
@@ -197,7 +219,9 @@ document.addEventListener("submit",e=>{
   const fd=new FormData(e.target);
   player={class:fd.get("class"),number:Number(fd.get("number"))};
   if(!classes.includes(player.class)||!Number.isInteger(player.number)||player.number<1||player.number>25)return;
-  questions=makeQuestions();
+  pool=[];
+  currentQuestion=undefined;
+  completion={state:""};
   index=0;
   question();
 });
@@ -207,8 +231,8 @@ document.addEventListener("click",e=>{
   if(b.hasAttribute("data-pick"))pick(b);
   if(b.hasAttribute("data-next")){
     index++;
-    if(index===roundSize)finish();
-    else question();
+    question();
+    if(index===milestone)saveCompletion();
   }
   if(b.hasAttribute("data-home"))home();
   if(b.hasAttribute("data-teacher")||b.hasAttribute("data-logout"))teacherHome();
