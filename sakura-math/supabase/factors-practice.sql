@@ -41,7 +41,11 @@ begin
   if p_mode is null or p_mode not in ('writing','choice') then raise exception 'Invalid factor activity'; end if;
   return coalesce((select jsonb_agg(to_jsonb(r) order by r.class,r.number)
     from (
-      select class,number,sum(question_count) as question_count,min(completed) as completed
+      select class,number,
+        sum(question_count) as question_count,
+        max(question_count) as best_round,
+        count(*) filter (where completed is not null) as completed_rounds,
+        min(completed) as completed
         from sakura_math.factor_practice_progress where mode=p_mode group by class,number
     ) r),'[]'::jsonb);
 end $$;

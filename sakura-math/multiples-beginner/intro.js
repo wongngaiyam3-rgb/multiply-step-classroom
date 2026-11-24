@@ -333,6 +333,66 @@ function teacherHome(){
     '<button class="primary">登入</button><p class="status" role="status"></p></form>'));
 }
 const hkDate=value=>new Date(value).toLocaleString("zh-HK",{timeZone:"Asia/Hong_Kong"});
+const writingHeaders = ["班別","學號","累計答對題數","單回最高","完成回數","完成狀況","首次完成時間（香港）"];
+
+function writingRecordCells(classFilter){
+  const byStudent = new Map(teacherRows.map(row=>[row.class+"-"+row.number,row]));
+  return classes.filter(className=>!classFilter||classFilter===className).flatMap(className=>
+    range(25).map(number=>{
+      const record=byStudent.get(className+"-"+number);
+      const total=record?.question_count??0;
+      const completed=record?.completed_rounds??0;
+      const progress=completed>0?"已完成":total>0?"進行中":"未有作答紀錄";
+      return [className,number,total,(record?.best_round??0)+" / "+round.length,
+        completed,progress,displayCompleted(record?.completed)];
+    })
+  );
+}
+
+function renderWritingRows(){
+  const filter=screen.querySelector("#writing-class").value;
+  const rows=writingRecordCells(filter);
+  const completed=rows.filter(row=>row[4]>0).length;
+  screen.querySelector("#writing-summary").textContent="已完成至少一回 "+completed+" / "+rows.length+" 人";
+  screen.querySelector("#writing-records").innerHTML=rows.map(row=>
+    "<tr>"+row.map(value=>"<td>"+escape(value)+"</td>").join("")+"</tr>").join("");
+}
+
+function writingReport(){
+  show("teacher",panel('<h1 tabindex="-1">因數填寫完成紀錄</h1>'+
+    '<p class="hint">答對一題即儲存。每回答對全部 20 題，即記作完成一回。</p>'+
+    '<label class="field">班別<select id="writing-class"><option value="">全部班別</option>'+
+    classes.map(className=>'<option>'+className+'</option>').join("")+'</select></label>'+
+    '<p id="writing-summary" class="status" role="status"></p>'+
+    '<div class="table-wrap"><table class="data"><thead><tr>'+
+    writingHeaders.map(label=>'<th scope="col">'+escape(label)+'</th>').join("")+
+    '</tr></thead><tbody id="writing-records"></tbody></table></div>'+
+    '<div class="actions"><button class="primary" data-export>匯出 CSV</button>'+
+    '<button class="outline" data-refresh-writing>更新紀錄</button>'+
+    '<button class="outline" data-logout>登出</button></div>'+
+    '<p id="writing-refresh-status" class="status" role="status"></p>'));
+  screen.querySelector("#writing-class").addEventListener("change",renderWritingRows);
+  renderWritingRows();
+}
+
+async function refreshWritingReport(button){
+  const token=teacherToken;
+  const status=screen.querySelector("#writing-refresh-status");
+  button.disabled=true;
+  status.textContent="正在更新紀錄…";
+  try{
+    const rows=await teacherRpc("factors",{p_token:token,p_mode:"writing"});
+    if(teacherToken!==token||!button.isConnected)return;
+    teacherRows=rows;
+    renderWritingRows();
+    status.textContent="紀錄已更新。";
+  }catch{
+    if(button.isConnected)status.textContent="未能更新紀錄，可重試或重新登入。";
+  }finally{
+    if(button.isConnected)button.disabled=false;
+  }
+}
+
 async function teacherLogin(form){
   const fields=new FormData(form);
   const button=form.querySelector("button");
@@ -353,6 +413,10 @@ async function teacherLogin(form){
     }
     teacherRows=rows;
     teacherToken=token;
+    if(practice?.writing){
+      writingReport();
+      return;
+    }
     const body=rows.map(r=>'<tr><td>'+escape(r.class)+'</td><td>'+escape(r.number)+'</td><td>'+
       escape(displayCount(r.question_count))+'</td><td>'+escape(displayCompleted(r.completed))+'</td></tr>').join("");
     show("teacher",panel('<h1 tabindex="-1">'+activity+'完成紀錄</h1>'+
@@ -370,7 +434,9 @@ async function teacherLogin(form){
 }
 function downloadRecords(){
   if(!teacherToken)return;
-  const cells=[["班別","學號","已完成題數","首次完成一回時間（香港）"],
+  const cells=practice?.writing
+    ?[writingHeaders,...writingRecordCells(screen.querySelector("#writing-class").value)]
+    :[["班別","學號","已完成題數","首次完成一回時間（香港）"],
     ...teacherRows.map(r=>[r.class,r.number,displayCount(r.question_count),displayCompleted(r.completed)])];
   const csv="\uFEFF"+cells.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(",")).join("\r\n");
   const link=document.createElement("a");
@@ -405,5 +471,7 @@ document.addEventListener("click",e=>{
   if(b.hasAttribute("data-teacher")||b.hasAttribute("data-logout"))teacherHome();
   if(b.hasAttribute("data-save"))saveProgress();
   if(b.hasAttribute("data-export"))downloadRecords();
+  if(b.hasAttribute("data-refresh-writing")&&!b.disabled)refreshWritingReport(b);
 });
+if(practice?.writing&&!demo)window.addEventListener("online",saveProgress);
 home(false);
